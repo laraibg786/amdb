@@ -46,31 +46,11 @@ jobs:
     timeout-minutes: 90
     strategy:
       fail-fast: false
-      max-parallel: 8
+      max-parallel: 2
       matrix:
         include:
           - target: x86_64-unknown-linux-gnu
             manylinux: 2_34
-          - target: i686-unknown-linux-gnu
-            manylinux: 2_34
-          - target: aarch64-unknown-linux-gnu
-            manylinux: 2_34
-          - target: armv7-unknown-linux-gnueabihf
-            manylinux: 2_34
-          - target: powerpc64le-unknown-linux-gnu
-            manylinux: 2_34
-          - target: s390x-unknown-linux-gnu
-            manylinux: 2_34
-          - target: riscv64gc-unknown-linux-gnu
-            manylinux: 2_34
-          - target: x86_64-unknown-linux-musl
-            manylinux: musllinux_1_2
-          - target: aarch64-unknown-linux-musl
-            manylinux: musllinux_1_2
-          - target: armv7-unknown-linux-musleabihf
-            manylinux: musllinux_1_2
-          - target: i686-unknown-linux-musl
-            manylinux: musllinux_1_2
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.0
@@ -97,12 +77,91 @@ jobs:
           compression-level: 0
           if-no-files-found: error
 
+  build-wheels-macos:
+    runs-on: ${{ matrix.runs_on }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runs_on: macos-latest
+            target: x86_64-apple-darwin
+          - runs_on: macos-14
+            target: aarch64-apple-darwin
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.0
+        with:
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v7.0.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
+
+      - name: Clean dist
+        run: rm -rf dist && mkdir -p dist
+
+      - name: Build wheel
+        uses: PyO3/maturin-action@v1.50.0
+        with:
+          maturin-version: ${{ env.MATURIN_VERSION }}
+          target: ${{ matrix.target }}
+          args: --release --locked --out dist --compatibility pypi
+
+      - name: Upload wheel artifact
+        uses: actions/upload-artifact@v7.0.0
+        with:
+          name: wheels-${{ matrix.target }}
+          path: dist
+          compression-level: 0
+          if-no-files-found: error
+
+  build-wheels-windows:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.0
+        with:
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v7.0.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
+
+      - name: Clean dist
+        shell: bash
+        run: rm -rf dist && mkdir -p dist
+
+      - name: Build wheel
+        uses: PyO3/maturin-action@v1.50.0
+        with:
+          maturin-version: ${{ env.MATURIN_VERSION }}
+          target: x86_64-pc-windows-msvc
+          args: --release --locked --out dist --compatibility pypi
+
+      - name: Upload wheel artifact
+        uses: actions/upload-artifact@v7.0.0
+        with:
+          name: wheels-x86_64-pc-windows-msvc
+          path: dist
+          compression-level: 0
+          if-no-files-found: error
+
   collect:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     needs:
       - build-sdist
       - build-wheels
+      - build-wheels-macos
+      - build-wheels-windows
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.0
