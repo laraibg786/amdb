@@ -1,31 +1,156 @@
-name: Build binaries (amdb)
+name: Build and (optionally)
 
 on:
-  workflow_dispatch: {}
+  push:
+  workflow_dispatch:
+
+env:
+  PACKAGE_NAME: amdb
+  MODULE_NAME: amdb
+  PYTHON_VERSION: "3.11"
+  CARGO_NET_RETRY: 10
+  CARGO_TERM_COLOR: always
+  MATURIN_VERSION: v1.12.6
 
 jobs:
   build-wheels:
     runs-on: ubuntu-latest
+    timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
         with:
           submodules: recursive
           persist-credentials: false
 
-      - name: Setup Python
-        uses: actions/setup-python@v6
+      # astral-sh/setup-uv v7.2.0
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v7.2.0
         with:
-          python-version: '3.11'
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
 
-      - name: Build wheels (maturin)
-        uses: PyO3/maturin-action@v1
+      - name: Clean dist
+        run: rm -rf dist && mkdir -p dist
+
+      # ── sdist ────────────────────────────────────────────────────────────────
+
+      # PyO3/maturin-action v1.50.0
+      - name: Build sdist
+        uses: PyO3/maturin-action@v1.50.0
         with:
-          maturin-version: 'v1.11.5'
-          command: build
+          maturin-version: ${{ env.MATURIN_VERSION }}
+          command: sdist
+          args: --out dist
+
+      # ── manylinux wheels ─────────────────────────────────────────────────────
+
+      - name: Build manylinux (x86_64) wheel
+        uses: PyO3/maturin-action@v1.50.0
+        with:
+          maturin-version: ${{ env.MATURIN_VERSION }}
+          target: x86_64-unknown-linux-gnu
+          manylinux: 2_17
           args: --release --locked --out dist --compatibility pypi
 
-      - name: Upload wheels
-        uses: actions/upload-artifact@v3
+      - name: Build manylinux (i686) wheel
+        uses: PyO3/maturin-action@v1.50.0
         with:
-          name: wheels
+          maturin-version: ${{ env.MATURIN_VERSION }}
+          target: i686-unknown-linux-gnu
+          manylinux: 2_17
+          args: --release --locked --out dist --compatibility pypi
+
+      - name: Build manylinux (aarch64) wheel
+        uses: PyO3/maturin-action@v1.50.0
+        with:
+          maturin-version: ${{ env.MATURIN_VERSION }}
+          target: aarch64-unknown-linux-gnu
+          manylinux: 2_17
+          args: --release --locked --out dist --compatibility pypi
+
+      - name: Build manylinux (armv7) wheel
+        uses: PyO3/maturin-action@v1.50.0
+        with:
+          maturin-version: ${{ env.MATURIN_VERSION }}
+          target: armv7-unknown-linux-gnueabihf
+          manylinux: 2_17
+          args: --release --locked --out dist --compatibility pypi
+
+      - name: Build manylinux (ppc64le) wheel
+        uses: PyO3/maturin-action@v1.50.0
+        with:
+          maturin-version: ${{ env.MATURIN_VERSION }}
+          target: powerpc64le-unknown-linux-gnu
+          manylinux: 2_17
+          args: --release --locked --out dist --compatibility pypi
+
+      - name: Build manylinux (s390x) wheel
+        uses: PyO3/maturin-action@v1.50.0
+        with:
+          maturin-version: ${{ env.MATURIN_VERSION }}
+          target: s390x-unknown-linux-gnu
+          manylinux: 2_17
+          args: --release --locked --out dist --compatibility pypi
+
+      # riscv64 requires manylinux 2_31 minimum
+      - name: Build manylinux (riscv64) wheel
+        uses: PyO3/maturin-action@v1.50.0
+        with:
+          maturin-version: ${{ env.MATURIN_VERSION }}
+          target: riscv64gc-unknown-linux-gnu
+          manylinux: 2_31
+          args: --release --locked --out dist --compatibility pypi
+
+      # ── musllinux wheels ─────────────────────────────────────────────────────
+
+      - name: Build musllinux (x86_64) wheel
+        uses: PyO3/maturin-action@v1.50.0
+        with:
+          maturin-version: ${{ env.MATURIN_VERSION }}
+          target: x86_64-unknown-linux-musl
+          manylinux: musllinux_1_2
+          args: --release --locked --out dist --compatibility pypi
+
+      - name: Build musllinux (aarch64) wheel
+        uses: PyO3/maturin-action@v1.50.0
+        with:
+          maturin-version: ${{ env.MATURIN_VERSION }}
+          target: aarch64-unknown-linux-musl
+          manylinux: musllinux_1_2
+          args: --release --locked --out dist --compatibility pypi
+
+      - name: Build musllinux (armv7) wheel
+        uses: PyO3/maturin-action@v1.50.0
+        with:
+          maturin-version: ${{ env.MATURIN_VERSION }}
+          target: armv7-unknown-linux-musleabihf
+          manylinux: musllinux_1_2
+          args: --release --locked --out dist --compatibility pypi
+
+      - name: Build musllinux (i686) wheel
+        uses: PyO3/maturin-action@v1.50.0
+        with:
+          maturin-version: ${{ env.MATURIN_VERSION }}
+          target: i686-unknown-linux-musl
+          manylinux: musllinux_1_2
+          args: --release --locked --out dist --compatibility pypi
+
+      # ── post-build ───────────────────────────────────────────────────────────
+
+      - name: List built artifacts
+        run: ls -lah dist || true
+
+      - name: Smoke test (linux x86_64 wheel)
+        run: |
+          uv pip install --system --no-index --find-links dist "${PACKAGE_NAME}" --force-reinstall
+          ${MODULE_NAME} --help
+          python -m ${MODULE_NAME} --help
+
+      - name: Upload wheels artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-linux
           path: dist
+          compression-level: 0
+          if-no-files-found: error

@@ -6,5 +6,6 @@
 .idea
 *.swp
 .amdb/
+dist/
 .fastembed_cache/
 .database/
