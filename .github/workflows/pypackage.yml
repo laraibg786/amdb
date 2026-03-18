@@ -18,14 +18,13 @@ jobs:
     timeout-minutes: 90
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6.0.0
         with:
           submodules: recursive
           persist-credentials: false
 
-      # astral-sh/setup-uv v7.2.0
       - name: Setup uv
-        uses: astral-sh/setup-uv@v7.2.0
+        uses: astral-sh/setup-uv@v7.0.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           enable-cache: true
@@ -35,7 +34,6 @@ jobs:
 
       # ── sdist ────────────────────────────────────────────────────────────────
 
-      # PyO3/maturin-action v1.50.0
       - name: Build sdist
         uses: PyO3/maturin-action@v1.50.0
         with:
@@ -148,7 +146,7 @@ jobs:
           python -m ${MODULE_NAME} --help
 
       - name: Upload wheels artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.0
         with:
           name: wheels-linux
           path: dist
